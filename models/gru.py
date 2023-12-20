@@ -1,12 +1,12 @@
-import hyperopt
-from hyperopt import fmin, tpe, hp
-from sklearn.model_selection import train_test_split
 from keras.models import Sequential
 from keras.layers import GRU, Dense
+from keras.models import Sequential
 from keras.optimizers import Adam
-from sklearn.metrics import mean_squared_error, mean_absolute_error
+from sklearn.metrics import mean_absolute_error
+
 from models.lstm import LSTMPredictions
-from utils.data_preparation import get_window_data, get_longterm_predictions, transform_y_for_longterm
+from utils.data_preparation import get_longterm_predictions
+
 
 class GRUPredictions(LSTMPredictions):
     def create_gru_model(self, params):
@@ -24,7 +24,7 @@ class GRUPredictions(LSTMPredictions):
         mae = mean_absolute_error(self.Y_test, y_pred)
         return mae
 
-    def get_predictions(self, opt = True):
+    def get_predictions(self, opt=True):
         if opt == True:
             params = self.get_optimal_parameters()
         else:

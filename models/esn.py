@@ -1,28 +1,28 @@
-import numpy as np
 import json
-from reservoirpy.nodes import Reservoir, Ridge, Input
-from reservoirpy.observables import nrmse, rsquare
-from sklearn import metrics
-from reservoirpy.hyper import research
 import math
-import hyperopt
+
+import numpy as np
+from reservoirpy.hyper import research
+from reservoirpy.nodes import Reservoir, Ridge, Input
+from reservoirpy.observables import rsquare
+from sklearn import metrics
 
 
 class ESNPredictions:
 
-    def __init__(self, data, window_size = 100, forecast_size = 1, test_size = 0.3, model_type = 'simple') -> None:
+    def __init__(self, data, window_size=100, forecast_size=1, test_size=0.3, model_type='simple') -> None:
         self.data = data
         self.window_size = window_size
         self.forecast_size = forecast_size
-        self.test_size= test_size
+        self.test_size = test_size
         self.model_type = model_type
 
-        self.data_train_len = round(self.data.shape[0]*(1-self.test_size))
+        self.data_train_len = round(self.data.shape[0] * (1 - self.test_size))
         self.data_test_len = self.data.shape[0] - self.data_train_len
         self.X_train = data[:self.data_train_len]
-        self.Y_train = data[1:self.data_train_len+1]
+        self.Y_train = data[1:self.data_train_len + 1]
         self.X_test = data[self.data_train_len:-1]
-        self.Y_test = data[self.data_train_len+1:]
+        self.Y_test = data[self.data_train_len + 1:]
 
         self.feature_len = self.X_test.shape[1]
 
@@ -53,7 +53,7 @@ class ESNPredictions:
             predictions = model.fit(X_train, y_train) \
                 .run(X_test)
 
-            loss = metrics.mean_absolute_error(y_test, predictions) #, norm_value=np.ptp(X_train))
+            loss = metrics.mean_absolute_error(y_test, predictions)  # , norm_value=np.ptp(X_train))
             r2 = rsquare(y_test, predictions)
 
             # Change the seed between instances
@@ -94,11 +94,11 @@ class ESNPredictions:
         print(best)
         return best[0]['lr'], best[0]['sr']
 
-    def get_model(self, opt = True):
+    def get_model(self, opt=True):
         if opt == True:
             opt_lr, opt_sr = self.get_optimal_parameters()
         else:
-            opt_lr, opt_sr = 0.3 , 0.125
+            opt_lr, opt_sr = 0.3, 0.125
 
         if self.model_type == 'simple':
             reservoir = Reservoir(100, iss=1, lr=opt_lr, sr=opt_sr)
@@ -127,18 +127,18 @@ class ESNPredictions:
             model = model.fit(self.X_train, self.Y_train, warmup=10)
         return model
 
-    def get_predictions(self, opt = True):
+    def get_predictions(self, opt=True):
 
         esn_model = self.get_model(opt)
         X_train_temp = self.X_train
         X_test_temp = self.X_test
-        test_blocks = math.floor(self.data_test_len/self.forecast_size)
-        #print(test_blocks, self.data_test_len, self.forecast_size)
+        test_blocks = math.floor(self.data_test_len / self.forecast_size)
+        # print(test_blocks, self.data_test_len, self.forecast_size)
         Y_pred_test = []
 
         for i in range(test_blocks):
 
-            #print('Тренируемся на:', X_train_temp[:-self.window_size][:, 0])
+            # print('Тренируемся на:', X_train_temp[:-self.window_size][:, 0])
             warmup_y = esn_model.run(X_train_temp[-self.window_size:], reset=True)
             Y_pred = np.empty((self.forecast_size, self.feature_len))
             x = warmup_y[-1].reshape(1, -1)
@@ -148,14 +148,9 @@ class ESNPredictions:
                 Y_pred[i] = x
 
             Y_pred = Y_pred[:, 0]
-            #print('Спрогнозировали:', Y_pred)
+            # print('Спрогнозировали:', Y_pred)
             Y_pred_test = np.append(Y_pred_test, Y_pred)
             X_train_temp = np.vstack([X_train_temp, X_test_temp[:][:self.forecast_size]])
             X_test_temp = X_test_temp[:][self.forecast_size:]
 
         return Y_pred_test
-
-
-
-
-
