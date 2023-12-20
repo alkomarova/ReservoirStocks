@@ -1,7 +1,8 @@
 import numpy as np
 import json
-from reservoirpy.nodes import Reservoir, Ridge
+from reservoirpy.nodes import Reservoir, Ridge, Input
 from reservoirpy.observables import nrmse, rsquare
+from sklearn import metrics
 from reservoirpy.hyper import research
 import math
 import hyperopt
@@ -9,11 +10,12 @@ import hyperopt
 
 class ESNPredictions:
 
-    def __init__(self, data, window_size = 100, forecast_size = 10, test_size = 0.3) -> None:
+    def __init__(self, data, window_size = 100, forecast_size = 1, test_size = 0.3, model_type = 'simple') -> None:
         self.data = data
         self.window_size = window_size
         self.forecast_size = forecast_size
         self.test_size= test_size
+        self.model_type = model_type
 
         self.data_train_len = round(self.data.shape[0]*(1-self.test_size))
         self.data_test_len = self.data.shape[0] - self.data_train_len
@@ -51,7 +53,7 @@ class ESNPredictions:
             predictions = model.fit(X_train, y_train) \
                 .run(X_test)
 
-            loss = nrmse(y_test, predictions, norm_value=np.ptp(X_train))
+            loss = metrics.mean_absolute_error(y_test, predictions) #, norm_value=np.ptp(X_train))
             r2 = rsquare(y_test, predictions)
 
             # Change the seed between instances
@@ -70,15 +72,15 @@ class ESNPredictions:
         dataset = ((self.X_train, self.Y_train), (self.X_test, self.Y_test))
         hyperopt_config = {
             "exp": f"hyperopt-multiscroll",  # the experimentation name
-            "hp_max_evals": 200,  # the number of different sets of parameters hyperopt has to try
+            "hp_max_evals": 50,  # the number of different sets of parameters hyperopt has to try
             "hp_method": "random",  # the method used by hyperopt to choose those sets (see below)
             "seed": 42,  # the random state seed, to ensure reproducibility
             "instances_per_trial": 3,  # how many random ESN will be tried with each sets of parameters
             "hp_space": {  # what are the ranges of parameters explored
                 "N": ["choice", 100],  # the number of neurons is fixed to 300
-                "sr": ["loguniform", 1e-2, 10],  # the spectral radius is log-uniformly distributed between 1e-6 and 10
-                "lr": ["loguniform", 1e-3, 1],  # idem with the leaking rate, from 1e-3 to 1
-                "iss": ["choice", 0.9],  # the input scaling is fixed
+                "sr": ["loguniform", 1e-3, 10],  # the spectral radius is log-uniformly distributed between 1e-6 and 10
+                "lr": ["loguniform", 1e-6, 1],  # idem with the leaking rate, from 1e-3 to 1
+                "iss": ["choice", 0.5],  # the input scaling is fixed
                 "ridge": ["choice", 1e-7],  # and so is the regularization parameter.
                 "seed": ["choice", 1234]  # an other random seed for the ESN initialization
             }
@@ -89,19 +91,45 @@ class ESNPredictions:
         with open(f"{hyperopt_config['exp']}.config.json", "w+") as f:
             json.dump(hyperopt_config, f)
         best = research(self.objective, dataset, f"{hyperopt_config['exp']}.config.json", ".")
+        print(best)
         return best[0]['lr'], best[0]['sr']
 
-    def get_predictions(self, opt = True):
-
+    def get_model(self, opt = True):
         if opt == True:
             opt_lr, opt_sr = self.get_optimal_parameters()
         else:
-            opt_lr, opt_sr = 0.00659, 0.135
-        reservoir = Reservoir(100, lr=opt_lr, sr=opt_sr)
-        ridge = Ridge(self.feature_len, ridge=1e-7)
+            opt_lr, opt_sr = 0.3 , 0.125
 
-        esn_model = reservoir >> ridge
-        esn_model = esn_model.fit(self.X_train, self.Y_train, warmup=10)
+        if self.model_type == 'simple':
+            reservoir = Reservoir(100, iss=1, lr=opt_lr, sr=opt_sr)
+            ridge = Ridge(self.feature_len, ridge=1e-7)
+            model = reservoir >> ridge
+            model = model.fit(self.X_train, self.Y_train, warmup=10)
+        elif self.model_type == 'hierarchical':
+            reservoir1 = Reservoir(100, lr=opt_lr, sr=opt_sr)
+            reservoir2 = Reservoir(100, lr=opt_lr, sr=opt_sr)
+
+            readout1 = Ridge(self.feature_len, ridge=1e-7)
+            readout2 = Ridge(self.feature_len, ridge=1e-7)
+
+            model = reservoir1 >> readout1 >> reservoir2 >> readout2
+            model = model.fit(self.X_train, self.Y_train)
+        elif self.model_type == 'deep':
+            data = Input()
+            reservoir1 = Reservoir(100, lr=opt_lr, sr=opt_sr)
+            reservoir2 = Reservoir(100, lr=opt_lr, sr=opt_sr)
+            reservoir3 = Reservoir(100, lr=opt_lr, sr=opt_sr)
+
+            readout = Ridge(self.feature_len, ridge=1e-7)
+
+            model = reservoir1 >> reservoir2 >> reservoir3 & \
+                    data >> [reservoir1, reservoir2, reservoir3] >> readout
+            model = model.fit(self.X_train, self.Y_train, warmup=10)
+        return model
+
+    def get_predictions(self, opt = True):
+
+        esn_model = self.get_model(opt)
         X_train_temp = self.X_train
         X_test_temp = self.X_test
         test_blocks = math.floor(self.data_test_len/self.forecast_size)
@@ -126,6 +154,8 @@ class ESNPredictions:
             X_test_temp = X_test_temp[:][self.forecast_size:]
 
         return Y_pred_test
+
+
 
 
 
