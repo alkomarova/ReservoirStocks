@@ -4,7 +4,7 @@ import math
 import numpy as np
 from reservoirpy.hyper import research
 from reservoirpy.nodes import Reservoir, Ridge, Input
-from reservoirpy.observables import rsquare
+from reservoirpy.observables import rsquare, nrmse
 from sklearn import metrics
 
 
@@ -53,7 +53,7 @@ class ESNPredictions:
             predictions = model.fit(X_train, y_train) \
                 .run(X_test)
 
-            loss = metrics.mean_absolute_error(y_test, predictions)  # , norm_value=np.ptp(X_train))
+            loss = nrmse(y_test, predictions, norm_value=np.ptp(X_train))  # , norm_value=np.ptp(X_train))
             r2 = rsquare(y_test, predictions)
 
             # Change the seed between instances
