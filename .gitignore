@@ -1,0 +1,6 @@
+img/
+utils/__pycache__/
+models/__pycache__/
+hyperopt-multiscroll/
+hyperopt-multiscroll.config.json
+.idea/
