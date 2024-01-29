@@ -72,7 +72,7 @@ class ESNPredictions:
         dataset = ((self.X_train, self.Y_train), (self.X_test, self.Y_test))
         hyperopt_config = {
             "exp": f"hyperopt-multiscroll",  # the experimentation name
-            "hp_max_evals": 50,  # the number of different sets of parameters hyperopt has to try
+            "hp_max_evals": 70,  # the number of different sets of parameters hyperopt has to try
             "hp_method": "random",  # the method used by hyperopt to choose those sets (see below)
             "seed": 42,  # the random state seed, to ensure reproducibility
             "instances_per_trial": 3,  # how many random ESN will be tried with each sets of parameters
